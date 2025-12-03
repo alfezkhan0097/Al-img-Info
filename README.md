@@ -1,7 +1,3 @@
-Of course. Here is a simple `README.md` file for your project.
-
----
-
 # AI Image Metadata Extractor
 
 A simple, client-side web tool to extract and view generation metadata from AI-generated PNG images. Just drag and drop an image to see its prompt, negative prompt, and other generation parameters.
@@ -42,6 +38,3 @@ This tool runs entirely in your browser. No images are uploaded to any server.
 -   **Frontend**: Built with vanilla HTML, CSS, and JavaScript. No frameworks are required.
 -   **Metadata Parsing**: The script reads PNG `tEXt`, `iTXt`, and `zTXt` chunks directly from the file buffer.
 -   **Decompression**: Uses the `pako.js` library to decompress zlib-compressed metadata chunks commonly used by ComfyUI.
--   **Styling**: The UI is styled with a modern, minimalist aesthetic inspired by Shadcn UI, using a neutral color palette.
-
----
