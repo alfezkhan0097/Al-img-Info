@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Image Metadata Extractor</title>
+    <!-- Importing Inter font for that clean UI look -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --background: #ffffff;
+            --foreground: #09090b;
+            --card: #ffffff;
+            --card-foreground: #09090b;
+            --popover: #ffffff;
+            --popover-foreground: #09090b;
+            --primary: #18181b;
+            --primary-foreground: #fafafa;
+            --secondary: #f4f4f5;
+            --secondary-foreground: #18181b;
+            --muted: #f4f4f5;
+            --muted-foreground: #71717a;
+            --accent: #f4f4f5;
+            --accent-foreground: #18181b;
+            --destructive: #ef4444;
+            --destructive-foreground: #fafafa;
+            --border: #e4e4e7;
+            --input: #e4e4e7;
+            --ring: #18181b;
+            --radius: 0.5rem;
+            
+            --success-bg: #ecfdf5;
+            --success-text: #047857;
+            --success-border: #10b981;
+            
+            --error-bg: #fef2f2;
+            --error-text: #b91c1c;
+            --error-border: #ef4444;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: #fafafa; /* Very light gray page background */
+            color: var(--foreground);
+            margin: 0;
+            padding: 20px;
+            line-height: 1.5;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+        }
+
+        /* Main Card Container */
+        .container {
+            width: 100%;
+            max-width: 800px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            padding: 24px;
+            margin-top: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            color: var(--foreground);
+            font-size: 1.5rem;
+            font-weight: 600;
+            letter-spacing: -0.025em;
+            margin-top: 0;
+            margin-bottom: 0.5rem;
+        }
+
+        /* Subtitle */
+        body > .container > p {
+            text-align: center;
+            color: var(--muted-foreground);
+            font-size: 0.875rem;
+            margin-bottom: 2rem;
+        }
+
+        /* Upload Area */
+        .drop-zone {
+            border: 2px dashed var(--input);
+            border-radius: var(--radius);
+            padding: 40px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: #fafafa;
+            margin-bottom: 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .drop-zone:hover, .drop-zone.dragover {
+            border-color: var(--ring);
+            background: var(--accent);
+        }
+
+        .drop-zone p:first-child {
+            font-weight: 500;
+            font-size: 0.95rem;
+            margin-bottom: 4px;
+            color: var(--foreground);
+        }
+
+        .drop-zone p:nth-child(2) {
+            color: var(--muted-foreground);
+            font-size: 0.8rem;
+            margin-top: 0;
+        }
+
+        .drop-zone img {
+            max-width: 100%;
+            max-height: 400px;
+            margin-top: 20px;
+            border-radius: var(--radius);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            border: 1px solid var(--border);
+        }
+
+        /* Status Messages */
+        #status {
+            padding: 12px 16px;
+            border-radius: var(--radius);
+            margin-bottom: 24px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            border: 1px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .info {
+            background: var(--secondary);
+            color: var(--secondary-foreground);
+            border-color: var(--border);
+        }
+
+        .success {
+            background: var(--success-bg);
+            color: var(--success-text);
+            border-color: var(--success-border);
+        }
+
+        .error {
+            background: var(--error-bg);
+            color: var(--error-text);
+            border-color: var(--error-border);
+        }
+
+        /* Tabs (Segmented Control Style) */
+        .tabs {
+            display: inline-flex;
+            background: var(--secondary);
+            padding: 4px;
+            border-radius: var(--radius);
+            margin-bottom: 20px;
+            width: 100%; /* Full width on mobile */
+        }
+
+        @media (min-width: 640px) {
+            .tabs { width: auto; }
+        }
+
+        .tab {
+            padding: 8px 16px;
+            background: transparent;
+            border: none;
+            border-radius: calc(var(--radius) - 2px);
+            color: var(--muted-foreground);
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+            flex: 1;
+            transition: all 0.2s;
+        }
+
+        .tab:hover {
+            color: var(--foreground);
+        }
+
+        .tab.active {
+            background: var(--background);
+            color: var(--foreground);
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        }
+
+        /* Tab Content */
+        .tab-content {
+            display: none;
+            animation: fadeIn 0.2s ease-in-out;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(2px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .tab-content.active { display: block; }
+
+        pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            padding: 16px;
+            background: var(--secondary);
+            border-radius: var(--radius);
+            color: var(--foreground);
+            border: 1px solid var(--border);
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        /* Field Display */
+        .field { margin-bottom: 20px; }
+
+        .field-label {
+            color: var(--muted-foreground);
+            font-weight: 500;
+            margin-bottom: 8px;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .field-value {
+            background: var(--background);
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.875rem;
+            line-height: 1.6;
+            color: var(--foreground);
+            white-space: pre-wrap;
+        }
+
+        /* Grid for Parameters */
+        .params-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 12px;
+        }
+
+        .param-item {
+            background: var(--secondary);
+            padding: 10px 12px;
+            border-radius: var(--radius);
+            border: 1px solid transparent;
+        }
+        
+        .param-item:hover {
+            border-color: var(--border);
+        }
+
+        .param-key {
+            color: var(--muted-foreground);
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            font-weight: 600;
+            margin-bottom: 4px;
+            letter-spacing: 0.02em;
+        }
+
+        .param-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--foreground);
+            word-break: break-all;
+        }
+
+        input[type="file"] { display: none; }
+
+        /* Buttons */
+        .copy-btn {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--foreground);
+            padding: 2px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.7rem;
+            font-weight: 500;
+            transition: all 0.2s;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .copy-btn:hover {
+            background: var(--secondary);
+            border-color: var(--muted-foreground);
+        }
+
+        .copy-all-btn {
+            background: var(--primary);
+            border: 1px solid var(--primary);
+            color: var(--primary-foreground);
+            padding: 10px 20px;
+            border-radius: var(--radius);
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+            margin-bottom: 24px;
+            width: 100%;
+            transition: opacity 0.2s;
+            display: none;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+
+        .copy-all-btn:hover {
+            opacity: 0.9;
+        }
+
+        .copy-all-btn.show { display: block; }
+
+        /* Mobile Adjustments */
+        @media (max-width: 600px) {
+            body { padding: 10px; }
+            .container { padding: 16px; }
+            .drop-zone { padding: 20px; }
+            .params-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>AI Metadata Extractor</h1>
+        <p>Drag & Drop PNG images from Stable Diffusion, ComfyUI, or Fooocus.</p>
+        
+        <div class="drop-zone" id="dropZone">
+            <p>Upload Image</p>
+            <p>Drag and drop or click to browse</p>
+            <input type="file" id="fileInput" accept="image/png,image/webp,image/jpeg">
+            <img id="preview" style="display:none;">
+        </div>
+        
+        <div id="status" class="info">Waiting for image...</div>
+        
+        <button class="copy-all-btn" id="copyAllBtn" onclick="copyAll()">Copy All Parameters</button>
+        
+        <div class="tabs">
+            <button class="tab active" data-tab="formatted">Formatted</button>
+            <button class="tab" data-tab="raw">JSON</button>
+        </div>
+        
+        <div id="formatted" class="tab-content active"></div>
+        <div id="raw" class="tab-content"><pre style="text-align: center; color: var(--muted-foreground);">No metadata loaded yet.</pre></div>
+    </div>
+
+    <!-- The original script remains untouched below this line -->
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const preview = document.getElementById('preview');
+        const status = document.getElementById('status');
+        const copyAllBtn = document.getElementById('copyAllBtn');
+        
+        let currentMetadata = null;
+
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById(tab.dataset.tab).classList.add('active');
+            });
+        });
+
+        // Drag and drop handlers
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+        });
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length) handleFile(e.target.files[0]);
+        });
+
+        async function handleFile(file) {
+            preview.src = URL.createObjectURL(file);
+            preview.style.display = 'block';
+            
+            status.textContent = 'Extracting metadata...';
+            status.className = 'info';
+            copyAllBtn.classList.remove('show');
+
+            try {
+                const { chunks, metadata } = await extractMetadata(file);
+                currentMetadata = metadata;
+                
+                document.getElementById('raw').innerHTML = `<pre>${JSON.stringify(metadata, null, 2)}</pre>`;
+                document.getElementById('formatted').innerHTML = formatMetadata(metadata);
+                
+                if (Object.keys(metadata).length === 0) {
+                    status.textContent = 'No AI generation metadata found';
+                    status.className = 'error';
+                } else {
+                    status.textContent = 'Metadata extracted successfully!';
+                    status.className = 'success';
+                    copyAllBtn.classList.add('show');
+                }
+            } catch (err) {
+                status.textContent = 'Error: ' + err.message;
+                status.className = 'error';
+                console.error(err);
+            }
+        }
+
+        async function extractMetadata(file) {
+            const buffer = await file.arrayBuffer();
+            const bytes = new Uint8Array(buffer);
+            
+            const isPng = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47;
+            if (!isPng) {
+                throw new Error('Only PNG files are supported');
+            }
+
+            const chunks = extractPngTextChunks(bytes);
+            const metadata = parseMetadata(chunks);
+            
+            return { chunks, metadata };
+        }
+
+        function extractPngTextChunks(bytes) {
+            const textChunks = {};
+            let offset = 8;
+
+            while (offset < bytes.length) {
+                const length = (bytes[offset] << 24) | (bytes[offset+1] << 16) | (bytes[offset+2] << 8) | bytes[offset+3];
+                const type = String.fromCharCode(bytes[offset+4], bytes[offset+5], bytes[offset+6], bytes[offset+7]);
+                
+                if (type === 'tEXt') {
+                    const data = bytes.slice(offset + 8, offset + 8 + length);
+                    const nullIndex = data.indexOf(0);
+                    const key = new TextDecoder('latin1').decode(data.slice(0, nullIndex));
+                    const value = new TextDecoder('latin1').decode(data.slice(nullIndex + 1));
+                    textChunks[key] = value;
+                }
+                
+                if (type === 'iTXt') {
+                    const data = bytes.slice(offset + 8, offset + 8 + length);
+                    let pos = 0;
+                    
+                    const keyEnd = data.indexOf(0, pos);
+                    const key = new TextDecoder('utf-8').decode(data.slice(pos, keyEnd));
+                    pos = keyEnd + 1;
+                    
+                    const compressionFlag = data[pos];
+                    const compressionMethod = data[pos + 1];
+                    pos += 2;
+                    
+                    const langEnd = data.indexOf(0, pos);
+                    pos = langEnd + 1;
+                    
+                    const transEnd = data.indexOf(0, pos);
+                    pos = transEnd + 1;
+                    
+                    let value;
+                    if (compressionFlag === 1 && compressionMethod === 0) {
+                        try {
+                            const compressed = data.slice(pos);
+                            value = typeof pako !== 'undefined' ? pako.inflate(compressed, { to: 'string' }) : '[compressed - pako not loaded]';
+                        } catch {
+                            value = new TextDecoder('utf-8').decode(data.slice(pos));
+                        }
+                    } else {
+                        value = new TextDecoder('utf-8').decode(data.slice(pos));
+                    }
+                    textChunks[key] = value;
+                }
+
+                if (type === 'zTXt') {
+                    const data = bytes.slice(offset + 8, offset + 8 + length);
+                    const nullIndex = data.indexOf(0);
+                    const key = new TextDecoder('latin1').decode(data.slice(0, nullIndex));
+                    const compressionMethod = data[nullIndex + 1];
+                    
+                    if (compressionMethod === 0 && typeof pako !== 'undefined') {
+                        try {
+                            const compressed = data.slice(nullIndex + 2);
+                            textChunks[key] = pako.inflate(compressed, { to: 'string' });
+                        } catch {
+                            textChunks[key] = '[decompression failed]';
+                        }
+                    } else {
+                        textChunks[key] = '[compressed - pako not loaded]';
+                    }
+                }
+                
+                if (type === 'IEND') break;
+                offset += 12 + length;
+            }
+
+            return textChunks;
+        }
+
+        function parseMetadata(chunks) {
+            let metadata = {};
+
+            if (chunks.parameters) {
+                metadata = parseA1111Parameters(chunks.parameters);
+                metadata._format = 'A1111/SD WebUI';
+            }
+            
+            if (chunks.prompt) {
+                try {
+                    const workflow = JSON.parse(chunks.prompt);
+                    metadata.workflow = workflow;
+                    metadata._format = 'ComfyUI';
+                    
+                    const extracted = extractComfyUIInfo(workflow);
+                    metadata = { ...metadata, ...extracted };
+                } catch {}
+            }
+            
+            if (chunks.workflow) {
+                try {
+                    metadata.workflow_full = JSON.parse(chunks.workflow);
+                } catch {}
+            }
+            
+            if (chunks.Comment) {
+                try { 
+                    metadata = JSON.parse(chunks.Comment);
+                    metadata._format = 'NovelAI';
+                } catch {}
+            }
+            
+            if (chunks.fooocus_scheme) {
+                try {
+                    metadata = JSON.parse(chunks.fooocus_scheme);
+                    metadata._format = 'Fooocus';
+                } catch {}
+            }
+
+            if (chunks.metadata) {
+                try { 
+                    const parsed = JSON.parse(chunks.metadata);
+                    metadata = { ...metadata, ...parsed };
+                } catch {}
+            }
+            
+            if (chunks.sui_image_params) {
+                try {
+                    metadata = JSON.parse(chunks.sui_image_params);
+                    metadata._format = 'SwarmUI';
+                } catch {}
+            }
+
+            return metadata;
+        }
+
+        function parseA1111Parameters(text) {
+            const metadata = {};
+            
+            const lines = text.split('\n');
+            let promptLines = [];
+            let negativePromptLines = [];
+            let paramsLine = '';
+            let inNegative = false;
+            
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                
+                if (/^Steps:\s*\d+,/.test(line) || /^Steps:\s*\d+$/.test(line)) {
+                    paramsLine = lines.slice(i).join(', ');
+                    break;
+                }
+                
+                if (line.startsWith('Negative prompt:')) {
+                    inNegative = true;
+                    const negContent = line.replace('Negative prompt:', '').trim();
+                    if (negContent) negativePromptLines.push(negContent);
+                    continue;
+                }
+                
+                if (inNegative) {
+                    negativePromptLines.push(line);
+                } else {
+                    promptLines.push(line);
+                }
+            }
+            
+            metadata.prompt = promptLines.join('\n').trim();
+            metadata.negative_prompt = negativePromptLines.join('\n').trim();
+            
+            if (paramsLine) {
+                const paramRegex = /([A-Za-z][A-Za-z0-9 _-]*?):\s*("(?:[^"\\]|\\.)*"|[^,]+?)(?=,\s*[A-Za-z][A-Za-z0-9 _-]*?:|$)/g;
+                let match;
+                
+                while ((match = paramRegex.exec(paramsLine)) !== null) {
+                    let key = match[1].trim();
+                    let value = match[2].trim();
+                    
+                    if (value.startsWith('"') && value.endsWith('"')) {
+                        value = value.slice(1, -1);
+                    }
+                    
+                    metadata[key] = value;
+                }
+                
+                if (!metadata.Steps) {
+                    const parts = paramsLine.split(',');
+                    for (const part of parts) {
+                        const colonIndex = part.indexOf(':');
+                        if (colonIndex > 0) {
+                            const key = part.slice(0, colonIndex).trim();
+                            const value = part.slice(colonIndex + 1).trim();
+                            if (key && value && !metadata[key]) {
+                                metadata[key] = value;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            return metadata;
+        }
+
+        function extractComfyUIInfo(workflow) {
+            const info = {};
+            
+            try {
+                for (const [nodeId, node] of Object.entries(workflow)) {
+                    if (!node.inputs) continue;
+                    
+                    if (node.class_type?.includes('KSampler') || node.class_type?.includes('sampler')) {
+                        if (node.inputs.seed !== undefined) info.seed = node.inputs.seed;
+                        if (node.inputs.steps !== undefined) info.steps = node.inputs.steps;
+                        if (node.inputs.cfg !== undefined) info.cfg = node.inputs.cfg;
+                        if (node.inputs.sampler_name) info.sampler = node.inputs.sampler_name;
+                        if (node.inputs.scheduler) info.scheduler = node.inputs.scheduler;
+                    }
+                    
+                    if (node.class_type === 'CLIPTextEncode' && node.inputs.text) {
+                        if (!info.prompts) info.prompts = [];
+                        info.prompts.push(node.inputs.text);
+                    }
+                    
+                    if (node.class_type?.includes('CheckpointLoader') && node.inputs.ckpt_name) {
+                        info.model = node.inputs.ckpt_name;
+                    }
+                    
+                    if (node.class_type === 'EmptyLatentImage') {
+                        if (node.inputs.width) info.width = node.inputs.width;
+                        if (node.inputs.height) info.height = node.inputs.height;
+                    }
+                }
+            } catch (e) {
+                console.error('Error extracting ComfyUI info:', e);
+            }
+            
+            return info;
+        }
+
+        function formatMetadata(metadata) {
+            if (Object.keys(metadata).length === 0) {
+                return '<p style="text-align:center; color:var(--muted-foreground);">No metadata found</p>';
+            }
+            
+            let html = '';
+            
+            const priorityFields = ['prompt', 'negative_prompt', 'prompts'];
+            const paramFields = ['Steps', 'steps', 'Sampler', 'sampler', 'CFG scale', 'cfg', 'Seed', 'seed', 
+                               'Size', 'width', 'height', 'Model', 'model', 'Model hash', 'VAE', 'VAE hash',
+                               'Clip skip', 'ENSD', 'scheduler'];
+            
+            if (metadata.prompt) {
+                html += `
+                    <div class="field">
+                        <div class="field-label"><span>Prompt</span> <button class="copy-btn" onclick="copyText(this, 'prompt')">Copy</button></div>
+                        <div class="field-value" id="prompt">${escapeHtml(metadata.prompt)}</div>
+                    </div>`;
+            }
+            
+            if (metadata.negative_prompt) {
+                html += `
+                    <div class="field">
+                        <div class="field-label"><span>Negative Prompt</span> <button class="copy-btn" onclick="copyText(this, 'neg-prompt')">Copy</button></div>
+                        <div class="field-value" id="neg-prompt">${escapeHtml(metadata.negative_prompt)}</div>
+                    </div>`;
+            }
+            
+            if (metadata.prompts && Array.isArray(metadata.prompts)) {
+                metadata.prompts.forEach((p, i) => {
+                    html += `
+                        <div class="field">
+                            <div class="field-label">Prompt ${i + 1}</div>
+                            <div class="field-value">${escapeHtml(p)}</div>
+                        </div>`;
+                });
+            }
+            
+            const params = {};
+            for (const key of [...paramFields, ...Object.keys(metadata)]) {
+                if (metadata[key] !== undefined && !priorityFields.includes(key) && 
+                    key !== '_format' && key !== 'workflow' && key !== 'workflow_full' &&
+                    typeof metadata[key] !== 'object') {
+                    params[key] = metadata[key];
+                }
+            }
+            
+            if (Object.keys(params).length > 0) {
+                html += '<div class="field"><div class="field-label">Generation Parameters</div><div class="params-grid">';
+                for (const [key, value] of Object.entries(params)) {
+                    html += `
+                        <div class="param-item">
+                            <div class="param-key">${escapeHtml(key)}</div>
+                            <div class="param-value">${escapeHtml(String(value))}</div>
+                        </div>`;
+                }
+                html += '</div></div>';
+            }
+            
+            if (metadata._format) {
+                html += `<div class="field"><div class="field-label">Detected Format</div><div class="field-value" style="display:inline-block; padding: 4px 10px;">${metadata._format}</div></div>`;
+            }
+            
+            return html || '<p>No displayable metadata</p>';
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function copyText(btn, elementId) {
+            const text = document.getElementById(elementId).textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                const original = btn.textContent;
+                btn.textContent = 'Copied!';
+                setTimeout(() => btn.textContent = original, 1500);
+            });
+        }
+
+        function copyAll() {
+            if (!currentMetadata) return;
+            
+            let text = '';
+            
+            // Prompt
+            if (currentMetadata.prompt) {
+                text += currentMetadata.prompt + '\n';
+            }
+            
+            // Negative prompt
+            if (currentMetadata.negative_prompt) {
+                text += 'Negative prompt: ' + currentMetadata.negative_prompt + '\n';
+            }
+            
+            // Build parameters line
+            const paramOrder = ['Steps', 'Sampler', 'Schedule type', 'CFG scale', 'Seed', 'Size', 
+                              'Model hash', 'Model', 'VAE hash', 'VAE', 'Denoising strength',
+                              'Clip skip', 'ENSD', 'Hires upscale', 'Hires steps', 'Hires upscaler',
+                              'Lora hashes', 'TI hashes', 'Version'];
+            
+            const skipKeys = ['prompt', 'negative_prompt', '_format', 'workflow', 'workflow_full', 'prompts'];
+            const params = [];
+            const usedKeys = new Set();
+            
+            // Add params in preferred order first
+            for (const key of paramOrder) {
+                if (currentMetadata[key] !== undefined && !skipKeys.includes(key)) {
+                    params.push(`${key}: ${currentMetadata[key]}`);
+                    usedKeys.add(key);
+                }
+            }
+            
+            // Add remaining params
+            for (const [key, value] of Object.entries(currentMetadata)) {
+                if (!usedKeys.has(key) && !skipKeys.includes(key) && typeof value !== 'object') {
+                    params.push(`${key}: ${value}`);
+                }
+            }
+            
+            if (params.length > 0) {
+                text += params.join(', ');
+            }
+            
+            navigator.clipboard.writeText(text.trim()).then(() => {
+                const btn = document.getElementById('copyAllBtn');
+                const original = btn.textContent;
+                btn.textContent = '✓ Copied!';
+                setTimeout(() => btn.textContent = original, 1500);
+            });
+        }
+    </script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+</body>
+</html>
