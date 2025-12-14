@@ -341,12 +341,13 @@
 <body>
     <div class="container">
         <h1>AI Metadata Extractor</h1>
-        <p>Drag & Drop PNG images from Stable Diffusion, ComfyUI, or Fooocus.</p>
+        <p>Drag & Drop images from Stable Diffusion, ComfyUI, or Fooocus.</p>
         
         <div class="drop-zone" id="dropZone">
             <p>Upload Image</p>
             <p>Drag and drop or click to browse</p>
-            <input type="file" id="fileInput" accept="image/png,image/webp,image/jpeg">
+            <!-- UPDATED: accept attribute to include jpeg and webp -->
+            <input type="file" id="fileInput" accept="image/png,image/webp,image/jpeg,image/jpg">
             <img id="preview" style="display:none;">
         </div>
         
@@ -363,7 +364,12 @@
         <div id="raw" class="tab-content"><pre style="text-align: center; color: var(--muted-foreground);">No metadata loaded yet.</pre></div>
     </div>
 
-    <!-- The original script remains untouched below this line -->
+    <!-- Libraries -->
+    <!-- Pako for PNG Compressed text -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+    <!-- Exifr for JPEG/WebP EXIF parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/exifr/dist/full.umd.js"></script>
+
     <script>
         const dropZone = document.getElementById('dropZone');
         const fileInput = document.getElementById('fileInput');
@@ -406,6 +412,10 @@
             status.textContent = 'Extracting metadata...';
             status.className = 'info';
             copyAllBtn.classList.remove('show');
+            
+            // Clear previous results
+            document.getElementById('formatted').innerHTML = '';
+            document.getElementById('raw').innerHTML = '';
 
             try {
                 const { chunks, metadata } = await extractMetadata(file);
@@ -433,16 +443,84 @@
             const buffer = await file.arrayBuffer();
             const bytes = new Uint8Array(buffer);
             
+            // Check file signatures
             const isPng = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47;
-            if (!isPng) {
-                throw new Error('Only PNG files are supported');
-            }
+            const isJpg = bytes[0] === 0xFF && bytes[1] === 0xD8;
+            const isWebp = bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46; // RIFF
 
-            const chunks = extractPngTextChunks(bytes);
-            const metadata = parseMetadata(chunks);
+            let chunks = {};
+            let metadata = {};
+
+            if (isPng) {
+                // Original PNG logic
+                chunks = extractPngTextChunks(bytes);
+                metadata = parseMetadata(chunks);
+            } 
+            else if (isJpg || isWebp) {
+                // New JPEG/WebP Logic using exifr
+                try {
+                    // SD/A1111 stores params in UserComment in EXIF
+                    const output = await exifr.parse(buffer, { userComment: true });
+                    
+                    if (output && output.UserComment) {
+                        const decodedComment = decodeExifUserComment(output.UserComment);
+                        
+                        // Treat the Exif UserComment as the raw input
+                        // If it looks like A1111 string:
+                        if (decodedComment.includes('Steps:') || decodedComment.includes('Negative prompt:')) {
+                            metadata = parseA1111Parameters(decodedComment);
+                            metadata._format = isJpg ? 'A1111/SD (JPEG)' : 'A1111/SD (WebP)';
+                        } 
+                        // If it looks like JSON (ComfyUI sometimes puts JSON here for non-PNG):
+                        else if (decodedComment.trim().startsWith('{')) {
+                            try {
+                                const json = JSON.parse(decodedComment);
+                                metadata = json;
+                                metadata._format = 'JSON (EXIF)';
+                                if(json.workflow) {
+                                     // Attempt to extract comfy details if structure matches
+                                     const extracted = extractComfyUIInfo(json.workflow);
+                                     metadata = { ...metadata, ...extracted };
+                                }
+                            } catch (e) {
+                                metadata.UserComment = decodedComment;
+                            }
+                        }
+                        else {
+                             metadata.UserComment = decodedComment;
+                             metadata._format = 'EXIF UserComment';
+                        }
+                    }
+                } catch (e) {
+                    console.warn("Exif parsing error:", e);
+                }
+            } 
+            else {
+                throw new Error('Unsupported file format. Please use PNG, JPEG, or WebP.');
+            }
             
             return { chunks, metadata };
         }
+
+        // Helper to handle Exif UserComment encoding quirks
+        function decodeExifUserComment(data) {
+            if (typeof data === 'string') return data;
+            if (data instanceof Uint8Array) {
+                // Often starts with "UNICODE\0" or "ASCII\0\0"
+                // Simple approach: decode and strip non-printables at start
+                let str = new TextDecoder().decode(data);
+                // Remove header if present (ASCII/UNICODE followed by nulls)
+                str = str.replace(/^(UNICODE|ASCII)\0+/, '');
+                // Remove null bytes
+                str = str.replace(/\0/g, '');
+                return str;
+            }
+            return String(data);
+        }
+
+        // ==========================================
+        // ORIGINAL PNG PARSING FUNCTIONS (UNCHANGED)
+        // ==========================================
 
         function extractPngTextChunks(bytes) {
             const textChunks = {};
@@ -585,6 +663,7 @@
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i];
                 
+                // Detection of the parameters line (Steps: X, Sampler: Y, etc.)
                 if (/^Steps:\s*\d+,/.test(line) || /^Steps:\s*\d+$/.test(line)) {
                     paramsLine = lines.slice(i).join(', ');
                     break;
@@ -644,7 +723,10 @@
             const info = {};
             
             try {
-                for (const [nodeId, node] of Object.entries(workflow)) {
+                // Handle both object (usual) and array (sometimes)
+                const nodes = Array.isArray(workflow) ? workflow : Object.values(workflow);
+
+                for (const node of nodes) {
                     if (!node.inputs) continue;
                     
                     if (node.class_type?.includes('KSampler') || node.class_type?.includes('sampler')) {
@@ -683,7 +765,7 @@
             
             let html = '';
             
-            const priorityFields = ['prompt', 'negative_prompt', 'prompts'];
+            const priorityFields = ['prompt', 'negative_prompt', 'prompts', 'UserComment'];
             const paramFields = ['Steps', 'steps', 'Sampler', 'sampler', 'CFG scale', 'cfg', 'Seed', 'seed', 
                                'Size', 'width', 'height', 'Model', 'model', 'Model hash', 'VAE', 'VAE hash',
                                'Clip skip', 'ENSD', 'scheduler'];
@@ -712,6 +794,14 @@
                             <div class="field-value">${escapeHtml(p)}</div>
                         </div>`;
                 });
+            }
+
+            if (metadata.UserComment && !metadata.prompt) {
+                 html += `
+                    <div class="field">
+                        <div class="field-label"><span>User Comment (EXIF)</span></div>
+                        <div class="field-value">${escapeHtml(metadata.UserComment)}</div>
+                    </div>`;
             }
             
             const params = {};
@@ -743,6 +833,7 @@
         }
 
         function escapeHtml(text) {
+            if (typeof text !== 'string') return text;
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
@@ -778,7 +869,7 @@
                               'Clip skip', 'ENSD', 'Hires upscale', 'Hires steps', 'Hires upscaler',
                               'Lora hashes', 'TI hashes', 'Version'];
             
-            const skipKeys = ['prompt', 'negative_prompt', '_format', 'workflow', 'workflow_full', 'prompts'];
+            const skipKeys = ['prompt', 'negative_prompt', '_format', 'workflow', 'workflow_full', 'prompts', 'UserComment'];
             const params = [];
             const usedKeys = new Set();
             
@@ -809,7 +900,5 @@
             });
         }
     </script>
-    
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
 </body>
 </html>
